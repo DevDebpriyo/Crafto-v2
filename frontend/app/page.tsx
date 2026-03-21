@@ -5,12 +5,15 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ArrowRight, Sparkles, Upload, Image as ImageIcon, Box, Boxes, X } from "lucide-react";
+import { useLoading } from "@/providers/LoadingProvider";
 
 export default function Home() {
   const router = useRouter();
+  const { startLoading } = useLoading();
   const [prompt, setPrompt] = useState("");
   const [isFocused, setIsFocused] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
   const [pathLengths, setPathLengths] = useState<number[]>([]);
   const pathRefs = useRef<(SVGPathElement | null)[]>([]);
   const [images, setImages] = useState<string[]>([]);
@@ -28,9 +31,35 @@ export default function Home() {
     }
   }, []);
 
-  const handleStart = () => {
+  const handleStart = async () => {
     if (!prompt.trim()) return;
-    router.push("/product");
+    
+    setIsGenerating(true);
+    startLoading();
+
+    try {
+      // Mock API call to backend
+      // Using a minimum delay to show the animation
+      const apiCall = fetch("http://localhost:8000/product/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt, images }),
+      }).catch(e => {
+        console.log("Mock API call failed (expected if backend not running):", e);
+        return null;
+      });
+      
+      const delay = new Promise(resolve => setTimeout(resolve, 2500)); // Increased slightly to show off animation
+      
+      await Promise.all([apiCall, delay]);
+      
+      // Navigate immediately - the product page will handle the exit animation
+      router.push("/product");
+      
+    } catch (error) {
+      console.error("Generation failed:", error);
+      setIsGenerating(false);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -101,10 +130,12 @@ export default function Home() {
   return (
     <div className="relative flex flex-col items-center justify-center h-full p-4 md:p-8 max-w-4xl mx-auto w-full overflow-hidden">
       
+      {/* Loading Overlay (managed globally via provider now, but we keep state for button disabled) */}
+      
       {/* Background Logo Vector Animation */}
       <div className={`
         absolute inset-0 flex items-center justify-center z-0 pointer-events-none
-        transition-opacity duration-1000 ease-out delay-200
+        transition-opacity duration-900 ease-out delay-100
         ${isLoaded ? "opacity-100" : "opacity-0"}
       `}>
         <svg 
@@ -124,7 +155,7 @@ export default function Home() {
               style={{
                 strokeDasharray: pathLengths[i] || 0,
                 strokeDashoffset: isLoaded ? 0 : (pathLengths[i] || 0),
-                transition: isLoaded ? "stroke-dashoffset 0.8s cubic-bezier(0.2, 0, 0.1, 1) 0.3s" : "none",
+                transition: isLoaded ? "stroke-dashoffset 0.6s cubic-bezier(0.2, 0, 0.1, 1) 0.1s" : "none",
                 opacity: pathLengths.length > 0 ? 1 : 0
               }}
             />
@@ -135,7 +166,7 @@ export default function Home() {
       {/* Top Logo */}
       <div className={`
         absolute top-8 left-8 z-10
-        transition-all duration-700 ease-out
+        transition-all duration-300 ease-out
         ${isLoaded ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-2"}
       `}>
         <div className="flex items-center gap-3">
@@ -149,7 +180,7 @@ export default function Home() {
         
         <div className={`
           space-y-2 text-center mb-4
-          transition-all duration-1000 ease-out delay-100
+          transition-all duration-500 ease-out
           ${isLoaded ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"}
         `}>
           <h1 className="text-4xl md:text-5xl font-bold tracking-tight">
@@ -163,7 +194,7 @@ export default function Home() {
         <div 
           className={`
             w-full max-w-2xl relative group
-            transition-all duration-1000 ease-out delay-200
+            transition-all duration-500 ease-out delay-100
             ${isLoaded ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"}
           `}
         >
@@ -171,7 +202,7 @@ export default function Home() {
             relative bg-background rounded-xl border-2 border-black overflow-hidden cursor-pointer
             transition-all duration-300 ease-out
             ${isFocused 
-              ? "scale-[1.01] shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] -translate-y-[2px] -translate-x-[2px]" 
+              ? "scale-[1.005] shadow-[5px_5px_0px_0px_rgba(0,0,0,1)] -translate-y-px -translate-x-px" 
               : "scale-100 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"}
           `}
           onClick={() => document.querySelector<HTMLTextAreaElement>('textarea')?.focus()}
@@ -191,8 +222,8 @@ export default function Home() {
                           e.stopPropagation();
                           removeImage(index);
                         }}
-                        className="absolute -top-1.5 -right-1.5 bg-destructive text-destructive-foreground rounded-full p-0.5 
-                                   opacity-0 group-hover/image:opacity-100 transition-opacity shadow-sm cursor-pointer"
+                        className="absolute -top-2 -right-2 bg-background text-foreground border-2 border-black rounded-full p-1 
+                                   opacity-0 group-hover/image:opacity-100 transition-all duration-200 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] cursor-pointer hover:scale-110 active:scale-95"
                       >
                         <X className="w-3 h-3" />
                       </button>
@@ -208,11 +239,12 @@ export default function Home() {
                 onPaste={handlePaste}
                 onFocus={() => setIsFocused(true)}
                 onBlur={() => setIsFocused(false)}
+                disabled={isGenerating}
                 className="min-h-[100px] w-full resize-none border-0 focus-visible:ring-0 focus-visible:ring-offset-0 p-0 text-lg bg-transparent shadow-none"
               />
             </div>
             
-            <div className="flex items-center justify-between p-3 border-t-2 border-black bg-muted/30">
+            <div className="flex items-center justify-between p-3 border-t-2 border-black bg-muted/30 cursor-default">
               <div className="flex gap-2">
                 <input 
                   type="file" 
@@ -224,7 +256,7 @@ export default function Home() {
                 <Button 
                   variant="outline" 
                   size="icon" 
-                  className="h-9 w-9 rounded-lg border-black hover:bg-background cursor-pointer" 
+                  className="h-9 w-9 rounded-lg border-black hover:bg-secondary transition-colors duration-200 cursor-pointer" 
                   title="Upload reference image"
                   onClick={(e) => {
                     e.stopPropagation();
@@ -240,14 +272,14 @@ export default function Home() {
                   e.stopPropagation();
                   handleStart();
                 }}
-                disabled={!prompt.trim()}
+                disabled={!prompt.trim() || isGenerating}
                 className={`
                   transition-all duration-300 cursor-pointer
-                  ${prompt.trim() ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}
+                  ${prompt.trim() && !isGenerating ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}
                 `}
               >
-                Generate
-                <ArrowRight className="w-4 h-4 ml-2" />
+                {isGenerating ? "Generating..." : "Generate"}
+                {!isGenerating && <ArrowRight className="w-4 h-4 ml-2" />}
               </Button>
             </div>
           </div>
@@ -255,7 +287,7 @@ export default function Home() {
 
         <div className={`
           flex flex-wrap justify-center gap-3 mt-8 
-          transition-all duration-700 ease-out delay-300
+          transition-all duration-300 ease-out delay-200
           ${isLoaded ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"}
         `}>
           {suggestions.map((suggestion, i) => (

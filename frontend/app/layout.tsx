@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Header } from "@/components/Header";
+import PageTransition from "@/components/PageTransition";
+import { LoadingProvider } from "@/providers/LoadingProvider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -32,10 +34,14 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased h-screen flex flex-col overflow-hidden`}
       >
         <div className="h-screen flex flex-col overflow-hidden bg-background">
-          <Header />
-          <main className="flex-1 flex flex-col overflow-hidden relative">
-            {children}
-          </main>
+          <LoadingProvider>
+            <main className="flex-1 flex flex-col overflow-hidden relative">
+              <PageTransition>
+                <Header />
+                {children}
+              </PageTransition>
+            </main>
+          </LoadingProvider>
         </div>
       </body>
     </html>

@@ -14,8 +14,16 @@ import {
 import { ArrowLeft, Upload, Sparkles, RotateCw, Download, ZoomIn, ZoomOut, Play, Pause, Settings, Sun, Warehouse, Eye, EyeOff, Package, Image, Box, Boxes } from "lucide-react";
 import ModelViewer from "@/components/ModelViewer";
 import { AIChatPanel } from "@/components/AIChatPanel";
+import { useLoading } from "@/providers/LoadingProvider";
 
 export default function ProductPage() {
+  const { stopLoading } = useLoading();
+
+  useEffect(() => {
+    // Signal that we've arrived so the loader can exit
+    stopLoading();
+  }, [stopLoading]);
+
   const [currentModelUrl, setCurrentModelUrl] = useState<string>();
   const [selectedColor, setSelectedColor] = useState("#60a5fa");
   const [selectedTexture, setSelectedTexture] = useState("matte");
@@ -42,7 +50,7 @@ export default function ProductPage() {
   ];
 
   return (
-    <div className="h-screen bg-background flex flex-col overflow-hidden">
+    <div className="h-screen bg-background flex flex-col overflow-hidden relative">
       <div className="flex-1 flex overflow-hidden">
         {/* 3D Viewer */}
         <div className="flex-1 relative bg-muted/30">
