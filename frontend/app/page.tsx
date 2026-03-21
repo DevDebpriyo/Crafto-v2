@@ -4,8 +4,15 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowRight, Sparkles, Upload, Image as ImageIcon, Box, Boxes, X } from "lucide-react";
+import { ArrowRight, Upload, Boxes, X } from "lucide-react";
 import { useLoading } from "@/providers/LoadingProvider";
+import { Bungee } from "next/font/google";
+
+const bungee = Bungee({
+  weight: "400",
+  subsets: ["latin"],
+  variable: "--font-bungee",
+});
 
 export default function Home() {
   const router = useRouter();
@@ -18,6 +25,10 @@ export default function Home() {
   const pathRefs = useRef<(SVGPathElement | null)[]>([]);
   const [images, setImages] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [currentProductIndex, setCurrentProductIndex] = useState(0);
+  const [isAnimating, setIsAnimating] = useState(false);
+
+  const productIdeas = ["Lego", "ball", "hat", "mug", "chair", "pillow", "labubu"];
 
   useEffect(() => {
     // Measure all paths
@@ -30,6 +41,21 @@ export default function Home() {
       return () => clearTimeout(timer);
     }
   }, []);
+
+  // Rotate through product ideas
+  useEffect(() => {
+    if (!isLoaded) return;
+    
+    const interval = setInterval(() => {
+      setIsAnimating(true);
+      setTimeout(() => {
+        setCurrentProductIndex((prev) => (prev + 1) % productIdeas.length);
+        setIsAnimating(false);
+      }, 300); // Half of transition duration
+    }, 2000); // Change every 2 seconds
+
+    return () => clearInterval(interval);
+  }, [isLoaded, productIdeas.length]);
 
   const handleStart = async () => {
     if (!prompt.trim()) return;
@@ -107,9 +133,9 @@ export default function Home() {
   };
 
   const suggestions = [
-    { icon: Box, text: "Design a modern perfume bottle" },
-    { icon: Sparkles, text: "Create eco-friendly cereal box" },
-    { icon: ImageIcon, text: "Generate minimal coffee packaging" },
+    { text: "Design a blue water bottle" },
+    { text: "Create a brown wooden baseball bat" },
+    { text: "Generate a red lego block" },
   ];
 
   const logoPaths = [
@@ -171,7 +197,7 @@ export default function Home() {
       `}>
         <div className="flex items-center gap-3">
           <Boxes className="w-10 h-10" />
-          <span className="text-xl font-bold tracking-tight">Packify</span>
+          <span className={`text-3xl ${bungee.className} lowercase`}>sello</span>
         </div>
       </div>
 
@@ -183,11 +209,18 @@ export default function Home() {
           transition-all duration-500 ease-out
           ${isLoaded ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"}
         `}>
-          <h1 className="text-4xl md:text-5xl font-bold tracking-tight">
-            What do you want to build?
+          <h1 className="text-4xl md:text-5xl font-bold tracking-tight relative inline-block">
+            Build a{" "}
+            <span 
+              className={`inline-block w-[160px] text-left transition-all duration-500 ease-in-out ${
+                isAnimating ? "opacity-0 translate-y-2" : "opacity-100 translate-y-0"
+              }`}
+            >
+              {productIdeas[currentProductIndex]}
+            </span>
           </h1>
           <p className="text-muted-foreground text-lg">
-            Describe your packaging idea and let AI visualize it for you.
+            Describe your product idea and let AI visualize it for you.
           </p>
         </div>
 
@@ -297,7 +330,6 @@ export default function Home() {
               className="flex items-center gap-2 px-4 py-2 text-sm bg-background border-2 border-black rounded-full 
                          hover:bg-secondary hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] cursor-pointer"
             >
-              <suggestion.icon className="w-4 h-4" />
               {suggestion.text}
             </button>
           ))}
