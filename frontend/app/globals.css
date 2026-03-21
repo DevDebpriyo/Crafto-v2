@@ -123,3 +123,23 @@
     @apply bg-background text-foreground;
   }
 }
+
+@keyframes draw-stroke {
+  0% {
+    stroke-dashoffset: 1000;
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  100% {
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+}
+
+.animate-draw {
+  stroke-dasharray: 1000;
+  stroke-dashoffset: 1000;
+  animation: draw-stroke 1.5s ease-out forwards;
+}
