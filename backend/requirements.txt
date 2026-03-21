@@ -6,8 +6,7 @@ pydantic-settings
 pydantic
 typing-extensions
 google-generativeai
-google-genai
+google-genai>=0.6.0
 redis
-httpx
 pytest
 pytest-asyncio

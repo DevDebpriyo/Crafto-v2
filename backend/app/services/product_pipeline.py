@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import logging
+import time
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-import httpx
-
 from app.integrations.trellis import trellis_service
+from app.integrations.gemini import gemini_image_service
 from app.models.product_state import (
     ProductIteration,
     ProductState,
@@ -21,15 +23,17 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
+# Create artifacts directory for debug outputs
+ARTIFACTS_DIR = Path(__file__).parent.parent.parent / "tests" / "artifacts"
+ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
+
 
 class ProductPipelineService:
     """Runs the create/edit pipeline for the single in-memory product session."""
 
     def __init__(self) -> None:
-        self._image_api_url = getattr(settings, "GEMINI_PRODUCT_IMAGE_API_URL", None)
-        self._image_api_key = getattr(settings, "GEMINI_PRODUCT_IMAGE_API_KEY", None)
-        self._image_timeout = getattr(settings, "GEMINI_PRODUCT_IMAGE_TIMEOUT", 45)
-        self._default_image_count = getattr(settings, "GEMINI_PRODUCT_IMAGE_COUNT", 3)
+        self._default_image_count = 3
+        self._thinking_level = settings.GEMINI_THINKING_LEVEL
 
     async def run_create(self, prompt: str, image_count: Optional[int] = None) -> None:
         """Execute the create pipeline end-to-end."""
@@ -64,13 +68,19 @@ class ProductPipelineService:
             )
 
             reference_images = state.images if mode == "edit" else None
-            images = await self._generate_product_views(
-                instruction,
-                reference_images=reference_images,
+            images = await gemini_image_service.generate_product_images(
+                prompt=instruction,
                 image_count=state.image_count or self._default_image_count,
+                reference_images=reference_images,
+                thinking_level=self._thinking_level,
             )
+            if not images:
+                raise RuntimeError("Gemini image pipeline returned no images")
             state.images = images
             save_product_state(state)
+            
+            # Save Gemini images to artifacts for inspection
+            self._save_gemini_images(images, mode)
 
             state.mark_progress("generating_model", "Generating 3D model with Trellis")
             save_product_state(state)
@@ -91,6 +101,9 @@ class ProductPipelineService:
             state.iterations.append(iteration)
             state.mark_complete("3D asset generated")
             save_product_state(state)
+            
+            # Save Trellis GLB model to artifacts
+            self._save_trellis_model(artifacts, mode)
 
             preview = self._determine_preview_image(state)
             self._update_status(
@@ -115,38 +128,6 @@ class ProductPipelineService:
                     error=str(exc),
                 )
             )
-
-    async def _generate_product_views(
-        self,
-        prompt: str,
-        reference_images: Optional[List[str]] = None,
-        image_count: int = 3,
-    ) -> List[str]:
-        """Call Gemini nano banana image endpoint to get clean multi-angle shots."""
-        if not self._image_api_url or not self._image_api_key:
-            raise RuntimeError("Gemini product image service is not configured")
-
-        payload: Dict[str, Any] = {
-            "prompt": prompt,
-            "image_count": image_count,
-        }
-        if reference_images:
-            payload["reference_images"] = reference_images
-
-        headers = {
-            "Authorization": f"Bearer {self._image_api_key}",
-            "Content-Type": "application/json",
-        }
-
-        async with httpx.AsyncClient(timeout=self._image_timeout) as client:
-            response = await client.post(self._image_api_url, json=payload, headers=headers)
-            response.raise_for_status()
-            data = response.json()
-
-        images = data.get("images")
-        if not isinstance(images, list) or not images:
-            raise RuntimeError("Image generation returned no images")
-        return images[:image_count]
 
     async def _generate_trellis_model(self, images: List[str]) -> Dict[str, Any]:
         """Call Trellis via the existing integration in a background thread."""
@@ -173,6 +154,59 @@ class ProductPipelineService:
         payload.preview_image = status.preview_image or payload.preview_image
         payload.updated_at = status.updated_at
         save_product_status(payload)
+
+    def _save_gemini_images(self, images: List[str], mode: str) -> None:
+        """Save Gemini-generated images to artifacts for inspection."""
+        try:
+            run_dir = ARTIFACTS_DIR / f"gemini_{mode}_{int(time.time())}"
+            run_dir.mkdir(parents=True, exist_ok=True)
+            logger.info(f"[product-pipeline] Saving {len(images)} Gemini images to {run_dir}")
+            
+            for idx, img in enumerate(images, start=1):
+                logger.info(f"[product-pipeline] Processing image {idx}, type: {type(img)}, starts with data:image: {isinstance(img, str) and img.startswith('data:image')}")
+                if isinstance(img, str) and img.startswith("data:image"):
+                    try:
+                        header, b64_data = img.split(",", 1)
+                        mime = header.split(";")[0].split(":")[1] if ":" in header else "image/png"
+                        extension = mime.split("/")[-1] if "/" in mime else "png"
+                        dest = run_dir / f"gemini_view_{idx}.{extension}"
+                        dest.write_bytes(base64.b64decode(b64_data))
+                        logger.info(f"[product-pipeline] ✓ Saved Gemini image {idx} to {dest}")
+                    except Exception as exc:
+                        logger.warning(f"[product-pipeline] Failed to save Gemini image {idx}: {exc}")
+                else:
+                    logger.warning(f"[product-pipeline] Skipping image {idx} - not a data URL (preview: {str(img)[:100]})")
+        except Exception as exc:
+            logger.warning(f"[product-pipeline] Failed to create artifacts dir: {exc}")
+
+    def _save_trellis_model(self, artifacts: TrellisArtifacts, mode: str) -> None:
+        """Download and save Trellis GLB model to artifacts."""
+        try:
+            if not artifacts.model_file:
+                logger.warning("[product-pipeline] No model_file to save")
+                return
+            
+            run_dir = ARTIFACTS_DIR / f"trellis_{mode}_{int(time.time())}"
+            run_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Download GLB model
+            import urllib.request
+            glb_path = run_dir / "model.glb"
+            logger.info("[product-pipeline] Downloading GLB from %s...", artifacts.model_file[:80])
+            with urllib.request.urlopen(artifacts.model_file) as response:
+                glb_path.write_bytes(response.read())
+            logger.info("[product-pipeline] ✓ Saved GLB model to %s (%.1f KB)", glb_path, glb_path.stat().st_size / 1024)
+            
+            # Download color video if available
+            if artifacts.color_video:
+                video_path = run_dir / "color.mp4"
+                logger.info(f"[product-pipeline] Downloading color video...")
+                with urllib.request.urlopen(artifacts.color_video) as response:
+                    video_path.write_bytes(response.read())
+                logger.info(f"[product-pipeline] ✓ Saved color video to {video_path}")
+                
+        except Exception as exc:
+            logger.warning(f"[product-pipeline] Failed to save Trellis artifacts: {exc}")
 
 
 product_pipeline_service = ProductPipelineService()

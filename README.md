@@ -1,4 +1,4 @@
-# SELLO
+# sello
 
 Bare minimum boilerplate replicating the structure of HTV.
 
