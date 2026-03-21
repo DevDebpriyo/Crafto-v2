@@ -143,7 +143,7 @@ You are a packaging panel layout model with a reference mockup.
 ## File Structure
 
 ```
-Sello/
+SELLO/
 ├── backend/
 │   ├── app/
 │   │   ├── services/

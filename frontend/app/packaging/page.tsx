@@ -128,6 +128,8 @@ function Packaging() {
             <h2 className="text-sm font-semibold">Controls</h2>
           </div>
 
+<<<<<<< HEAD
+=======
           <div className="border-b border-border p-4 shrink-0 bg-muted/10">
             <h3 className="text-xs font-medium text-muted-foreground mb-2">AI Assistant</h3>
             <AIChatPanel 
@@ -137,7 +139,17 @@ function Packaging() {
             />
           </div>
 
+>>>>>>> d1b91512f6abe717f3ad91acdd61274048a3925c
           <div className="flex-1 overflow-y-auto p-4 flex flex-col space-y-4">
+            {/* AI Assistant Section */}
+            <div className="space-y-2">
+              <Label className="text-xs font-medium text-muted-foreground">AI Assistant</Label>
+              <AIChatPanel 
+                selectedPanelId={selectedPanelId}
+                packageModel={packageModel}
+                onTextureGenerated={handleTextureGenerated}
+              />
+            </div>
             {/* View Toggle Buttons */}
             <div className="space-y-2">
               <Label className="text-xs font-medium text-muted-foreground">View Mode</Label>
