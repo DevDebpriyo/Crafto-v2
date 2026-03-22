@@ -133,6 +133,8 @@ class TrellisService:
             elif "meshy" in model_id_lc:
                 arguments = {
                     "image_urls": images,
+                    "topology": "quad",
+                    "target_polycount": 30000,
                     "enable_pbr": True,
                     "should_remesh": True,
                     "should_texture": True,
@@ -182,16 +184,16 @@ class TrellisService:
                     model_glb = result["model_glb"]
                     if isinstance(model_glb, dict) and "url" in model_glb:
                         output["model_file"] = model_glb["url"]
-                        logger.info(f"🎯 Model file URL: {output['model_file']}")
+                        logger.info(f"🎯 Model file URL: {output.get('model_file')}")
                     elif isinstance(model_glb, str):
                         output["model_file"] = model_glb
-                        logger.info(f"🎯 Model file URL: {output['model_file']}")
+                        logger.info(f"🎯 Model file URL: {output.get('model_file')}")
                 elif "model_file" in result and result["model_file"]:
                     if isinstance(result["model_file"], dict) and "url" in result["model_file"]:
                         output["model_file"] = result["model_file"]["url"]
                     elif isinstance(result["model_file"], str):
                         output["model_file"] = result["model_file"]
-                    logger.info(f"🎯 Model file URL: {output['model_file']}")
+                    logger.info(f"🎯 Model file URL: {output.get('model_file')}")
             
             if not output:
                 raise Exception(f"No valid output received from fal.ai. Result was: {result}")

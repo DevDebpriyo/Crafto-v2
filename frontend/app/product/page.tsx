@@ -9,7 +9,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ZoomIn, ZoomOut, Play, Pause, Settings, Sun, Warehouse, Eye, EyeOff, Download } from "lucide-react";
+import { ZoomIn, ZoomOut, Play, Pause, Settings, Sun, Warehouse, Eye, EyeOff, Download, X } from "lucide-react";
 import ModelViewer, { ModelViewerRef } from "@/components/ModelViewer";
 import { AIChatPanel } from "@/components/AIChatPanel";
 import { useLoading } from "@/providers/LoadingProvider";
@@ -28,6 +28,7 @@ function ProductPage() {
   const [autoRotate, setAutoRotate] = useState(true);
   const [isEditInProgress, setIsEditInProgress] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [isGalleryOpen, setIsGalleryOpen] = useState(false);
   
   const latestIterationIdRef = useRef<string | null>(null);
   const viewerRef = useRef<ModelViewerRef>(null);
@@ -161,9 +162,10 @@ function ProductPage() {
   }, [autoRotate, currentModelUrl, isDownloading]);
 
   return (
-    <div className="h-screen bg-background flex flex-col overflow-hidden">
-      <div className="flex-1 flex overflow-hidden">
-        <div className="flex-1 relative bg-muted/30">
+    <>
+      <div className="h-screen bg-background flex flex-col overflow-hidden">
+        <div className="flex-1 flex overflow-hidden">
+          <div className="flex-1 relative bg-muted/30">
           <ModelViewer
             ref={viewerRef}
             key={modelKey}
@@ -175,9 +177,13 @@ function ProductPage() {
           />
 
           {previewImage && (
-            <div className="absolute bottom-4 left-4 w-48 border-4 border-black bg-card shadow-[4px_4px_0_rgba(0,0,0,0.5)]">
-              <div className="text-[10px] font-mono uppercase px-3 py-1 border-b-2 border-black bg-black text-white">
-                Latest Render
+              <div 
+                className="absolute bottom-4 left-4 w-48 border-4 border-black bg-card shadow-[4px_4px_0_rgba(0,0,0,0.5)] cursor-pointer transition-transform hover:-translate-y-1 hover:shadow-[6px_6px_0_rgba(0,0,0,0.5)]"
+                onClick={() => setIsGalleryOpen(true)}
+              >
+                <div className="flex justify-between items-center px-3 py-1 border-b-2 border-black bg-black text-white">
+                  <span className="text-[10px] font-mono uppercase">Latest Render</span>
+                  <Eye className="w-3 h-3" />
               </div>
               <div className="aspect-square overflow-hidden bg-muted">
                 <img
@@ -266,7 +272,42 @@ function ProductPage() {
         </div>
       </div>
     </div>
-  );
-}
 
-export default ProductPage;
+      {/* Gallery Modal */}
+      {isGalleryOpen && productState?.images && productState.images.length > 0 && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
+          <div className="relative w-full max-w-5xl bg-card border-4 border-black p-6 shadow-[8px_8px_0_rgba(0,0,0,1)]">
+            <div className="flex justify-between items-center border-b-2 border-black pb-4 mb-4">
+              <h2 className="text-xl font-bold font-mono">Input Views</h2>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => setIsGalleryOpen(false)}
+                className="h-8 w-8 rounded-none border-2 border-black hover:bg-black hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </Button>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {productState.images.map((img, idx) => (
+                <div key={idx} className="relative aspect-square border-2 border-black bg-muted overflow-hidden">
+                  <img
+                    src={img}
+                    alt={`View ${idx + 1}`}
+                    className="w-full h-full object-contain"
+                  />
+                  <div className="absolute bottom-0 left-0 bg-black text-white text-[10px] uppercase font-mono px-2 py-1">
+                    View {idx + 1}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+      </>
+    );
+  }
+
+  export default ProductPage;

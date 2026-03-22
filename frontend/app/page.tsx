@@ -189,7 +189,6 @@ export default function Home() {
         {draftImage && !draftImages && (
            <div className="w-full max-w-lg mb-4 flex flex-col items-center space-y-4 animate-in fade-in zoom-in duration-500">
              <div className="flex items-center justify-between w-full">
-               <div className="flex items-center justify-between w-full">
                <h2 className="text-2xl font-bold">Draft Preview</h2>
                {multiviewBackup && (
                  <Button variant="outline" size="sm" onClick={() => { setDraftImages(multiviewBackup); setDraftImage(null); setMultiviewBackup(null); }}>
@@ -197,13 +196,7 @@ export default function Home() {
                  </Button>
                )}
              </div>
-               {multiviewBackup && (
-                 <Button variant="outline" size="sm" onClick={() => { setDraftImages(multiviewBackup); setDraftImage(null); setMultiviewBackup(null); }}>
-                   Back to Grid
-                 </Button>
-               )}
-             </div>
-             <div className="relative w-full rounded-2xl border-4 border-black overflow-hidden shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] bg-white aspect-square flex items-center justify-center">
+             <div className="relative w-full h-[40vh] min-h-[300px] rounded-2xl border-4 border-black overflow-hidden shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] bg-white flex items-center justify-center">
                  <img src={draftImage} alt="Draft" className="max-w-full max-h-full object-contain" />
              </div>
              <p className="text-muted-foreground text-center">
@@ -213,12 +206,12 @@ export default function Home() {
         )}
 
         {draftImages && draftImages.length > 0 && (
-           <div className="w-full max-w-2xl mb-4 flex flex-col items-center space-y-4 animate-in fade-in zoom-in duration-500">
+           <div className="w-full max-w-4xl mb-4 flex flex-col items-center space-y-4 animate-in fade-in zoom-in duration-500">
              <h2 className="text-2xl font-bold">Multi-View Preview</h2>
-             <div className="grid grid-cols-2 gap-4 w-full">
+             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 w-full px-4">
                {draftImages.map((img: string, idx: number) => (
-                 <div key={idx} onClick={() => { setMultiviewBackup(draftImages); setDraftImage(img); setDraftImages(null); }} className="group relative w-full rounded-2xl border-4 border-black overflow-hidden shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] bg-white aspect-square flex items-center justify-center cursor-pointer transition-all hover:scale-[1.02]">
-                     <img src={img} alt={`View ${idx + 1}`} className="max-w-full max-h-full object-contain" />
+                 <div key={idx} onClick={() => { setMultiviewBackup(draftImages); setDraftImage(img); setDraftImages(null); }} className="group relative w-full h-40 md:h-56 rounded-2xl border-4 border-black overflow-hidden shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] bg-white flex items-center justify-center cursor-pointer transition-all hover:scale-[1.02]">
+                     <img src={img} alt={`View ${idx + 1}`} className="w-full h-full object-cover" />
                      <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity flex-col space-y-2">
                        <span className="text-white font-bold text-lg">Edit View {idx + 1}</span>
                        <span className="text-white/80 text-sm px-4 text-center">Click to select this view for editing</span>
@@ -267,9 +260,10 @@ export default function Home() {
                     onChange={(e) => setSelectedModel(e.target.value)}
                     className="h-9 px-2 text-sm bg-white border-2 border-black rounded-lg cursor-pointer outline-none focus:ring-2 focus:ring-black focus:border-transparent"
                     onClick={(e) => e.stopPropagation()}
+                    title={selectedModel.includes("trellis") ? "Faster generation" : "High quality"}
                   >
-                    <option value="fal-ai/trellis-2">Trellis</option>
-                    <option value="fal-ai/meshy/v5/multi-image-to-3d">Meshy</option>
+                    <option value="fal-ai/trellis-2" title="Faster generation">Trellis</option>
+                    <option value="fal-ai/meshy/v5/multi-image-to-3d" title="High quality">Meshy</option>
                   </select>                {!draftImage && !draftImages && (
                  <>
                   <input type="file" ref={fileInputRef} onChange={handleFileSelect} className="hidden" accept="image/*" />
