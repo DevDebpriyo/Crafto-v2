@@ -9,13 +9,17 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ZoomIn, ZoomOut, Play, Pause, Settings, Sun, Warehouse, Eye, EyeOff, Download, X } from "lucide-react";
+import { ZoomIn, ZoomOut, Play, Pause, Settings, Sun, Warehouse, Eye, EyeOff, Download, X, Layers } from "lucide-react";
+import { remeshProduct } from "@/lib/product-api";
 import ModelViewer, { ModelViewerRef } from "@/components/ModelViewer";
 import { AIChatPanel } from "@/components/AIChatPanel";
 import { useLoading } from "@/providers/LoadingProvider";
-import { getProductState, recoverProductState } from "@/lib/product-api";
+import { getProductState } from "@/lib/product-api";
 import { ProductState } from "@/lib/product-types";
 import { getCachedModelUrl } from "@/lib/model-cache";
+
+const REMESH_POLL_INTERVAL_MS = 2000;
+const REMESH_MAX_WAIT_MS = 10 * 60 * 1000;
 
 function ProductPage() {
   const { stopLoading } = useLoading();
@@ -29,8 +33,12 @@ function ProductPage() {
   const [isEditInProgress, setIsEditInProgress] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [isGalleryOpen, setIsGalleryOpen] = useState(false);
+  const [isRemeshOpen, setIsRemeshOpen] = useState(false);
+  const [remeshConfig, setRemeshConfig] = useState({ target_polycount: 30000, topology: "triangle", resize_height: 0, origin_at: "" });
+  const [isRemeshing, setIsRemeshing] = useState(false);
   
   const latestIterationIdRef = useRef<string | null>(null);
+  const isPollingRef = useRef(false);
   const viewerRef = useRef<ModelViewerRef>(null);
 
   const previewImage =
@@ -113,6 +121,35 @@ function ProductPage() {
     }
   }, [applyModelUrl, currentModelUrl]);
 
+  const pollUntilProductIdle = useCallback(async () => {
+    const start = Date.now();
+    while (Date.now() - start < REMESH_MAX_WAIT_MS) {
+      const state = await getProductState();
+      setProductState(state);
+
+      if (!state.in_progress) {
+        await hydrateProductState();
+        return;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, REMESH_POLL_INTERVAL_MS));
+    }
+    throw new Error("Remesh timed out");
+  }, [hydrateProductState]);
+
+  const ensureBackgroundPolling = useCallback(async () => {
+    if (isPollingRef.current) return;
+    isPollingRef.current = true;
+    try {
+      await pollUntilProductIdle();
+    } catch (error) {
+      console.error("Background polling failed:", error);
+    } finally {
+      isPollingRef.current = false;
+      setIsEditInProgress(false);
+    }
+  }, [pollUntilProductIdle]);
+
   useEffect(() => {
     // On mount, just hydrate - don't call recovery as it breaks ongoing generations
     hydrateProductState().finally(() => stopLoading());
@@ -124,6 +161,41 @@ function ProductPage() {
     const timer = setTimeout(() => setZoomAction(null), 200);
     return () => clearTimeout(timer);
   }, [zoomAction]);
+
+  const handleRemeshSubmit = async () => {
+    try {
+      setIsRemeshing(true);
+      setIsEditInProgress(true);
+      setIsRemeshOpen(false);
+      
+      const payload: {
+        target_polycount: number;
+        topology: string;
+        resize_height: number;
+        origin_at?: string;
+      } = {
+        target_polycount: remeshConfig.target_polycount,
+        topology: remeshConfig.topology,
+        resize_height: remeshConfig.resize_height || 0,
+      };
+      if (remeshConfig.origin_at) {
+        payload.origin_at = remeshConfig.origin_at;
+      }
+      
+      await remeshProduct(payload);
+      await pollUntilProductIdle();
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsRemeshing(false);
+      setIsEditInProgress(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!productState?.in_progress || isRemeshing) return;
+    void ensureBackgroundPolling();
+  }, [productState?.in_progress, isRemeshing, ensureBackgroundPolling]);
 
   const handleDownloadScreenshot = useCallback(async () => {
     if (!viewerRef.current || isDownloading || !currentModelUrl) return;
@@ -218,6 +290,9 @@ function ProductPage() {
             <Button size="icon" variant="secondary" onClick={() => setAutoRotate(!autoRotate)}>
               {autoRotate ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
             </Button>
+            <Button size="icon" variant="secondary" onClick={() => setIsRemeshOpen(true)} title="Remesh Model">
+              <Layers className="w-4 h-4" />
+            </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button size="icon" variant="secondary">
@@ -272,7 +347,48 @@ function ProductPage() {
         </div>
       </div>
     </div>
-
+        {/* Remesh Modal */}
+        {isRemeshOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
+            <div className="relative w-full max-w-md bg-card border-4 border-black p-6 shadow-[8px_8px_0_rgba(0,0,0,1)]">
+              <div className="flex justify-between items-center border-b-2 border-black pb-4 mb-4">
+                <h2 className="text-xl font-bold font-mono">Remesh Model</h2>
+                <Button variant="outline" size="icon" onClick={() => setIsRemeshOpen(false)} className="h-8 w-8 border-2 border-black hover:bg-black hover:text-white">
+                  <X className="w-5 h-5" />
+                </Button>
+              </div>
+              <div className="space-y-4 font-mono">
+                <div>
+                  <label className="block text-sm font-bold mb-1">Target Polycount</label>
+                  <input type="number" value={remeshConfig.target_polycount} onChange={(e) => setRemeshConfig({...remeshConfig, target_polycount: parseInt(e.target.value) || 30000})} className="w-full border-2 border-black p-2" />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold mb-1">Topology</label>
+                  <select value={remeshConfig.topology} onChange={(e) => setRemeshConfig({...remeshConfig, topology: e.target.value})} className="w-full border-2 border-black p-2 bg-background">
+                    <option value="triangle">Triangle</option>
+                    <option value="quad">Quad</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-bold mb-1">Resize Height (0 for no resize)</label>
+                  <input type="number" step="0.1" value={remeshConfig.resize_height} onChange={(e) => setRemeshConfig({...remeshConfig, resize_height: parseFloat(e.target.value) || 0})} className="w-full border-2 border-black p-2" />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold mb-1">Origin Offset</label>
+                  <select value={remeshConfig.origin_at} onChange={(e) => setRemeshConfig({...remeshConfig, origin_at: e.target.value})} className="w-full border-2 border-black p-2 bg-background">
+                    <option value="">No effect</option>
+                    <option value="center">Center</option>
+                    <option value="bottom">Bottom</option>
+                  </select>
+                </div>
+              </div>
+              <div className="mt-6 flex justify-end gap-2">
+                <Button variant="outline" className="border-2 border-black" onClick={() => setIsRemeshOpen(false)}>Cancel</Button>
+                <Button onClick={handleRemeshSubmit} disabled={isRemeshing} className="bg-black text-white hover:bg-black/80">Start</Button>
+              </div>
+            </div>
+          </div>
+        )}
       {/* Gallery Modal */}
       {isGalleryOpen && productState?.images && productState.images.length > 0 && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">

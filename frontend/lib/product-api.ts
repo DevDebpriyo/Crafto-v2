@@ -133,3 +133,13 @@ export async function startTrellisOnly(prompt: string, images: string[], mode: "
   });
   return handleResponse(response);
 }
+
+
+export async function remeshProduct(body: { target_polycount: number, topology: string, resize_height: number, origin_at?: string }): Promise<{ message: string }> {
+  const response = await fetch(`${API_BASE}/product/remesh`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return handleResponse(response);
+}

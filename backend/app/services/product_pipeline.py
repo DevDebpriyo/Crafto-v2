@@ -418,6 +418,109 @@ class ProductPipelineService:
             logger.warning(f"[product-pipeline] Failed to save product state: {exc}")
 
 
+
+
+
+
+
+
+
+
+    def run_remesh_pipeline(self, target_polycount: int, topology: str, resize_height: float, origin_at: Optional[str] = None) -> None:
+        """Background task for remeshing an existing model."""
+        try:
+            logger.info("[product-pipeline] Starting remesh pipeline")
+            
+            # Fetch current state
+            state = get_product_state()
+            if not state.trellis_output or not state.trellis_output.model_file:
+                logger.error("[product-pipeline] No model file to remesh.")
+                state.mark_error("No model available to remesh.")
+                save_product_state(state)
+                self._update_status(
+                    ProductStatus(
+                        status="error",
+                        progress=0,
+                        message="Remesh failed",
+                        error="No model available to remesh."
+                    )
+                )
+                return
+
+            original_model_url = state.trellis_output.model_file
+            
+            self._update_status(
+                ProductStatus(
+                    status="processing",
+                    progress=10,
+                    message="Submitting remesh request to Meshy...",
+                    model_file=original_model_url
+                )
+            )
+
+            # Call remesh API
+            from app.integrations.trellis import trellis_service
+            
+            output = trellis_service.remesh_3d_asset(
+                model_url=original_model_url,
+                target_polycount=target_polycount,
+                topology=topology,
+                resize_height=resize_height,
+                origin_at=origin_at
+            )
+            
+            # Update state with new model
+            state = get_product_state() # fresh fetch
+            
+            # Create a new iteration for the remesh
+            from app.models.product_state import ProductIteration, TrellisArtifacts
+            import uuid
+            
+            new_artifacts = TrellisArtifacts()
+            if state.trellis_output:
+                new_artifacts.no_background_images = list(state.trellis_output.no_background_images)
+            new_artifacts.model_file = output.get("model_file")
+            
+            new_iteration = ProductIteration(
+                id=str(uuid.uuid4()),
+                type="edit",
+                prompt="Remeshed model",
+                note=f"Target Poly: {target_polycount}, Topology: {topology}",
+                trellis_output=new_artifacts
+            )
+            
+            state.iterations.append(new_iteration)
+            state.trellis_output = new_artifacts
+            state.status = "complete"
+            state.message = "Remesh complete"
+            state.in_progress = False
+            
+            save_product_state(state)
+            
+            self._update_status(
+                ProductStatus(
+                    status="complete",
+                    progress=100,
+                    message="Model remeshed successfully",
+                    model_file=new_artifacts.model_file,
+                )
+            )
+            
+            logger.info("[product-pipeline] Remesh pipeline complete")
+            
+        except Exception as exc:
+            logger.exception("[product-pipeline] Exception in remesh: %s", exc)
+            state = get_product_state()
+            state.mark_error(str(exc))
+            save_product_state(state)
+            self._update_status(
+                ProductStatus(
+                    status="error",
+                    progress=0,
+                    message="Remesh failed",
+                    error=str(exc)
+                )
+            )
+
+
 product_pipeline_service = ProductPipelineService()
-
-

@@ -21,6 +21,7 @@ class TrellisService:
     def __init__(self):
         self.api_key = settings.FAL_KEY
         self.model_id = settings.TRELLIS_MODEL_ID
+        self._progress_callback = None
         if self.api_key:
             # Set environment variable for fal_client library
             os.environ["FAL_KEY"] = self.api_key
@@ -205,6 +206,71 @@ class TrellisService:
             logger.exception(f"Failed to generate 3D asset: {str(e)}")
             raise Exception(f"Failed to generate 3D asset: {str(e)}")
     
+    
+    def remesh_3d_asset(
+        self,
+        model_url: str,
+        target_formats: Optional[List[str]] = None,
+        topology: str = "triangle",
+        target_polycount: int = 30000,
+        resize_height: float = 0.0,
+        origin_at: Optional[str] = None
+    ) -> TrellisOutput:
+        """Remeshes an existing 3D model using Meshy-5 on fal.ai"""
+        if not self.api_key:
+            raise Exception("FAL_KEY environment variable is not set")
+            
+        remesh_model_id = "fal-ai/meshy/v5/remesh"
+        logger.info(f"Starting 3D remesh with model: {remesh_model_id}")
+        logger.info(f"Target polycount: {target_polycount}, Topology: {topology}")
+        logger.info(f"Model URL: {model_url}")
+        
+        args = {
+            "model_url": model_url,
+            "target_formats": target_formats or ["glb", "fbx"],
+            "topology": topology,
+            "target_polycount": target_polycount,
+        }
+        
+        if resize_height > 0:
+            args["resize_height"] = resize_height
+        if origin_at in ["bottom", "center"]:
+            args["origin_at"] = origin_at
+            
+        try:
+            start_time = time.time()
+            result = fal_client.subscribe(
+                remesh_model_id,
+                arguments=args,
+                with_logs=True,
+                on_queue_update=lambda update: self._handle_queue_update(update),
+            )
+                
+            generation_time = time.time() - start_time
+            logger.info(f"✓ Remesh completed in {generation_time:.2f}s")
+            
+            output: TrellisOutput = {}
+            if isinstance(result, dict):
+                # Try handling `model_glb`
+                if "model_glb" in result and result["model_glb"]:
+                    m = result["model_glb"]
+                    if isinstance(m, dict) and "url" in m:
+                        output["model_file"] = m["url"]
+                    elif isinstance(m, str):
+                        output["model_file"] = m
+                elif "model_urls" in result and result["model_urls"]:
+                    if "glb" in result["model_urls"] and "url" in result["model_urls"]["glb"]:
+                        output["model_file"] = result["model_urls"]["glb"]["url"]
+            
+            if not output.get("model_file"):
+                raise Exception(f"No valid output received from remesh. Result was: {result}")
+                
+            return output
+            
+        except Exception as e:
+            logger.exception(f"Failed to remesh 3D asset: {str(e)}")
+            raise Exception(f"Failed to remesh 3D asset: {str(e)}")
+
     def _handle_queue_update(self, update):
         """Handle queue status updates and log progress."""
         status_msg = None
